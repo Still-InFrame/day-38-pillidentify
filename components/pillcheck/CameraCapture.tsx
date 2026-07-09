@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import { SafetyNotice } from "./SafetyNotice";
 
 type CameraState = "idle" | "starting" | "ready" | "error";
+type PillSide = "front" | "back";
+
+const sideLabels: Record<PillSide, string> = {
+  front: "front",
+  back: "back",
+};
 
 export function CameraCapture() {
   const router = useRouter();
@@ -13,8 +19,16 @@ export function CameraCapture() {
   const streamRef = useRef<MediaStream | null>(null);
   const [cameraState, setCameraState] = useState<CameraState>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [activeSide, setActiveSide] = useState<PillSide>("front");
+  const [photos, setPhotos] = useState<Record<PillSide, string | null>>({
+    front: null,
+    back: null,
+  });
+  const [backIsBlank, setBackIsBlank] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const preview = photos[activeSide];
+  const hasFrontPhoto = Boolean(photos.front);
+  const hasBackDecision = Boolean(photos.back) || backIsBlank;
 
   async function startCamera() {
     setError(null);
@@ -43,6 +57,7 @@ export function CameraCapture() {
   function stopCamera() {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    setCameraState("idle");
   }
 
   function capturePhoto() {
@@ -55,7 +70,7 @@ export function CameraCapture() {
     const context = canvas.getContext("2d");
     context?.drawImage(video, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.88);
-    setPreview(dataUrl);
+    savePhoto(activeSide, dataUrl);
     stopCamera();
   }
 
@@ -64,12 +79,50 @@ export function CameraCapture() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = () => setPreview(String(reader.result));
+    reader.onload = () => savePhoto(activeSide, String(reader.result));
     reader.readAsDataURL(file);
   }
 
+  function savePhoto(side: PillSide, dataUrl: string) {
+    setPhotos((current) => ({ ...current, [side]: dataUrl }));
+    if (side === "back") {
+      setBackIsBlank(false);
+    }
+  }
+
+  function selectSide(side: PillSide) {
+    stopCamera();
+    setError(null);
+    setActiveSide(side);
+  }
+
+  function retakeSide(side: PillSide) {
+    stopCamera();
+    setPhotos((current) => ({ ...current, [side]: null }));
+    if (side === "back") {
+      setBackIsBlank(false);
+    }
+    setActiveSide(side);
+  }
+
+  function markBackBlank() {
+    stopCamera();
+    setPhotos((current) => ({ ...current, back: null }));
+    setBackIsBlank(true);
+    setActiveSide("back");
+  }
+
   async function analyzeImage() {
-    if (!preview) return;
+    if (!photos.front) {
+      setError("Capture or upload the front side first.");
+      return;
+    }
+
+    if (!hasBackDecision) {
+      setError("Capture the back side, upload it, or mark the back as blank.");
+      return;
+    }
+
     setIsAnalyzing(true);
     setError(null);
 
@@ -77,7 +130,11 @@ export function CameraCapture() {
       const response = await fetch("/api/analyze-pill-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_url: preview }),
+        body: JSON.stringify({
+          front_image_url: photos.front,
+          back_image_url: photos.back,
+          back_is_blank: backIsBlank,
+        }),
       });
 
       if (!response.ok) {
@@ -86,7 +143,13 @@ export function CameraCapture() {
 
       const analysis = await response.json();
       sessionStorage.setItem("pillcheck.analysis", JSON.stringify(analysis));
-      sessionStorage.setItem("pillcheck.photo", preview);
+      sessionStorage.setItem("pillcheck.frontPhoto", photos.front);
+      if (photos.back) {
+        sessionStorage.setItem("pillcheck.backPhoto", photos.back);
+      } else {
+        sessionStorage.removeItem("pillcheck.backPhoto");
+      }
+      sessionStorage.setItem("pillcheck.backIsBlank", String(backIsBlank));
       router.push("/confirm");
     } catch {
       setError("The image could not be analyzed. Try a clearer single-pill photo.");
@@ -100,10 +163,33 @@ export function CameraCapture() {
       <SafetyNotice />
 
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          {(["front", "back"] as PillSide[]).map((side) => (
+            <button
+              key={side}
+              className={activeSide === side ? "chip-active" : "chip"}
+              type="button"
+              onClick={() => selectSide(side)}
+            >
+              {side === "front" ? "Front side" : "Back side"}
+              {photos[side] ? " captured" : side === "back" && backIsBlank ? " blank" : ""}
+            </button>
+          ))}
+        </div>
+
+        <div className="mb-3 rounded-md bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
+          Capture the {sideLabels[activeSide]} side. If the back side has no
+          imprint or markings, use the blank option.
+        </div>
+
         <div className="aspect-[4/5] overflow-hidden rounded-md bg-slate-950">
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={preview} alt="Captured pill preview" className="h-full w-full object-cover" />
+          ) : activeSide === "back" && backIsBlank ? (
+            <div className="flex h-full w-full items-center justify-center px-8 text-center text-sm font-medium leading-6 text-white">
+              Back side marked blank
+            </div>
           ) : (
             <video
               ref={videoRef}
@@ -122,17 +208,17 @@ export function CameraCapture() {
         ) : null}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {!preview && cameraState !== "ready" ? (
+          {!preview && !(activeSide === "back" && backIsBlank) && cameraState !== "ready" ? (
             <button className="btn-primary" type="button" onClick={startCamera}>
               {cameraState === "starting" ? "Starting camera..." : "Use camera"}
             </button>
           ) : null}
-          {!preview && cameraState === "ready" ? (
+          {!preview && !(activeSide === "back" && backIsBlank) && cameraState === "ready" ? (
             <button className="btn-primary" type="button" onClick={capturePhoto}>
-              Capture photo
+              Capture {sideLabels[activeSide]}
             </button>
           ) : null}
-          {preview ? (
+          {hasFrontPhoto && hasBackDecision ? (
             <button className="btn-primary" type="button" onClick={analyzeImage} disabled={isAnalyzing}>
               {isAnalyzing ? "Analyzing..." : "Analyze traits"}
             </button>
@@ -147,17 +233,27 @@ export function CameraCapture() {
               onChange={handleUpload}
             />
           </label>
-          {preview ? (
-            <button className="btn-secondary" type="button" onClick={() => setPreview(null)}>
+          {activeSide === "back" && !photos.back && !backIsBlank ? (
+            <button className="btn-secondary" type="button" onClick={markBackBlank}>
+              Back is blank
+            </button>
+          ) : null}
+          {preview || (activeSide === "back" && backIsBlank) ? (
+            <button className="btn-secondary" type="button" onClick={() => retakeSide(activeSide)}>
               Retake
+            </button>
+          ) : null}
+          {hasFrontPhoto && !hasBackDecision ? (
+            <button className="btn-secondary" type="button" onClick={() => selectSide("back")}>
+              Continue to back
             </button>
           ) : null}
         </div>
       </section>
 
       <p className="text-sm leading-6 text-slate-600">
-        Photograph one loose pill on a plain surface. Imprints matter most, so
-        retake the photo if the letters or numbers are hard to read.
+        Photograph one loose pill on a plain surface. Capture both sides when
+        possible because imprints and logos are often split across the pill.
       </p>
     </div>
   );

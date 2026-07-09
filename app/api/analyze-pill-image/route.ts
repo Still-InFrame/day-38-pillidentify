@@ -64,7 +64,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const analysis = await analyzeWithOpenAI(parsed.data.image_url);
+    const analysis = await analyzeWithOpenAI({
+      frontImageUrl: parsed.data.front_image_url ?? parsed.data.image_url,
+      backImageUrl: parsed.data.back_image_url,
+      backIsBlank: parsed.data.back_is_blank,
+    });
     return NextResponse.json(analysis);
   } catch (error) {
     console.error("OpenAI pill trait extraction failed", error);
@@ -78,15 +82,29 @@ export async function POST(request: NextRequest) {
 async function parseFormData(request: NextRequest) {
   const formData = await request.formData();
   const imageUrl = formData.get("image_url");
+  const frontImageUrl = formData.get("front_image_url");
+  const backImageUrl = formData.get("back_image_url");
+  const backIsBlank = formData.get("back_is_blank");
 
   return {
     image_url: typeof imageUrl === "string" ? imageUrl : undefined,
+    front_image_url: typeof frontImageUrl === "string" ? frontImageUrl : undefined,
+    back_image_url: typeof backImageUrl === "string" ? backImageUrl : undefined,
+    back_is_blank: backIsBlank === "true",
   };
 }
 
-async function analyzeWithOpenAI(imageUrl: string | undefined) {
-  if (!imageUrl) {
-    throw new Error("Missing image_url");
+async function analyzeWithOpenAI({
+  frontImageUrl,
+  backImageUrl,
+  backIsBlank,
+}: {
+  frontImageUrl: string | undefined;
+  backImageUrl: string | undefined;
+  backIsBlank: boolean;
+}) {
+  if (!frontImageUrl) {
+    throw new Error("Missing front image");
   }
 
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -104,18 +122,35 @@ async function analyzeWithOpenAI(imageUrl: string | undefined) {
             {
               type: "input_text",
               text: [
-                "Extract only visible pill traits from this image.",
+                "Extract only visible pill traits from the provided pill image or images.",
+                "The first image is the front side of the pill.",
+                backImageUrl
+                  ? "The second image is the back side of the same pill."
+                  : backIsBlank
+                    ? "The user reported that the back side is blank, so only the front image is provided."
+                    : "Only one side was provided, so confidence must be limited and warnings should mention that the other side was not captured.",
                 "Never identify the medication name. Never say the pill is safe.",
                 "Never provide dosage, interaction, treatment, or emergency advice.",
-                "If more than one pill is visible, no pill is visible, the image is blurry, dark, cropped, obstructed, or the imprint cannot be read, set should_retake_photo to true and add warnings.",
-                "If no imprint is visible, set imprint_text to null, imprint_confidence to low, and include a warning that the pill may not be reliably identifiable.",
+                "Combine visible markings and imprints from both sides into imprint_text when both sides are provided.",
+                "If one side is blank, do not invent an imprint for that side.",
+                "If more than one pill is visible, no pill is visible, the images are blurry, dark, cropped, obstructed, or the imprint cannot be read, set should_retake_photo to true and add warnings.",
+                "If no imprint is visible on any provided side, set imprint_text to null, imprint_confidence to low, and include a warning that the pill may not be reliably identifiable.",
               ].join(" "),
             },
             {
               type: "input_image",
-              image_url: imageUrl,
+              image_url: frontImageUrl,
               detail: "high",
             },
+            ...(backImageUrl
+              ? [
+                  {
+                    type: "input_image",
+                    image_url: backImageUrl,
+                    detail: "high",
+                  },
+                ]
+              : []),
           ],
         },
       ],

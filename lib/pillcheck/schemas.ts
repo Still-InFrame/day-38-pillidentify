@@ -27,6 +27,21 @@ export const analyzePillImageRequestSchema = z.object({
       "Must be an image data URL or URL",
     )
     .optional(),
+  front_image_url: z
+    .string()
+    .refine(
+      (value) => value.startsWith("data:image/") || z.url().safeParse(value).success,
+      "Must be an image data URL or URL",
+    )
+    .optional(),
+  back_image_url: z
+    .string()
+    .refine(
+      (value) => value.startsWith("data:image/") || z.url().safeParse(value).success,
+      "Must be an image data URL or URL",
+    )
+    .optional(),
+  back_is_blank: z.boolean().default(false),
 });
 
 export const searchPillMatchesRequestSchema = z.object({
