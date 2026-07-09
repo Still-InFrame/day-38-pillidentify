@@ -79,6 +79,12 @@ create policy "pill references are readable"
   to anon, authenticated
   using (true);
 
+drop policy if exists "enriched pill references can be created" on public.pillidentify_pill_references;
+create policy "enriched pill references can be created"
+  on public.pillidentify_pill_references for insert
+  to anon, authenticated
+  with check (source in ('user_correction_enriched', 'external_enrichment', 'manual'));
+
 drop policy if exists "anonymous searches can be created" on public.pillidentify_pill_searches;
 create policy "anonymous searches can be created"
   on public.pillidentify_pill_searches for insert
@@ -96,6 +102,12 @@ create policy "api cache is readable"
   on public.pillidentify_api_cache for select
   to anon, authenticated
   using (expires_at > now());
+
+drop policy if exists "api cache can be written by app" on public.pillidentify_api_cache;
+create policy "api cache can be written by app"
+  on public.pillidentify_api_cache for insert
+  to anon, authenticated
+  with check (provider in ('openfda', 'rxnorm', 'dailymed'));
 
 -- Seed data is intentionally small and mock-friendly. Add verified reference data
 -- later from an official ingestion workflow before treating matches as useful.

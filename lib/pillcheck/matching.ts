@@ -10,7 +10,7 @@ type SearchInput = {
   photo_quality: "poor" | "okay" | "good";
 };
 
-function normalizeImprint(value: string | null | undefined) {
+export function normalizeImprintForSearch(value: string | null | undefined) {
   return (value ?? "").replace(/[^a-z0-9]/gi, "").toUpperCase();
 }
 
@@ -58,9 +58,9 @@ function labelForScore(score: number, hasImprint: boolean): "low" | "medium" | "
 }
 
 function uniqueImprintVariants(input: SearchInput) {
-  const front = normalizeImprint(input.front_imprint);
-  const back = normalizeImprint(input.back_imprint);
-  const combined = normalizeImprint(input.imprint);
+  const front = normalizeImprintForSearch(input.front_imprint);
+  const back = normalizeImprintForSearch(input.back_imprint);
+  const combined = normalizeImprintForSearch(input.imprint);
   const candidates = [
     { value: combined, reason: "imprint" },
     { value: [front, back].filter(Boolean).join(""), reason: "front/back imprint" },
@@ -89,7 +89,7 @@ export function rankPillMatches(
       let score = 0;
       const match_reasons: string[] = [];
       const referenceImprint =
-        reference.normalized_imprint ?? normalizeImprint(reference.imprint);
+        reference.normalized_imprint ?? normalizeImprintForSearch(reference.imprint);
       const referenceShape = normalizeTrait(reference.shape);
       const referenceColor = normalizeTrait(reference.color);
 

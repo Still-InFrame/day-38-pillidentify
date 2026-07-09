@@ -13,6 +13,9 @@ const feedbackLabels = {
 export function ResultsView() {
   const [matches, setMatches] = useState<PillMatch[]>([]);
   const [feedback, setFeedback] = useState<Record<string, string>>({});
+  const [correctName, setCorrectName] = useState("");
+  const [correctionStatus, setCorrectionStatus] = useState<string | null>(null);
+  const [isCorrecting, setIsCorrecting] = useState(false);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -33,6 +36,47 @@ export function ResultsView() {
         feedback_value: value,
       }),
     }).catch(() => undefined);
+  }
+
+  async function submitCorrection(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const lastSearch = JSON.parse(
+      sessionStorage.getItem("pillcheck.lastSearch") ?? "{}",
+    );
+    setIsCorrecting(true);
+    setCorrectionStatus(null);
+
+    try {
+      const response = await fetch("/api/reference-corrections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...lastSearch,
+          medication_name: correctName.trim(),
+        }),
+      });
+
+      if (!response.ok) throw new Error("Correction failed");
+
+      const payload = await response.json();
+      if (Array.isArray(payload.matches) && payload.matches.length > 0) {
+        setMatches(payload.matches);
+        sessionStorage.setItem(
+          "pillcheck.results",
+          JSON.stringify({ matches: payload.matches }),
+        );
+      }
+
+      setCorrectionStatus(
+        payload.reference_saved
+          ? "Added an enriched possible match and saved it for future searches."
+          : "Added an enriched possible match for this search. Run the Supabase RLS update to persist future corrections.",
+      );
+    } catch {
+      setCorrectionStatus("Could not enrich that correction. Check the spelling or try the generic name.");
+    } finally {
+      setIsCorrecting(false);
+    }
   }
 
   return (
@@ -57,6 +101,34 @@ export function ResultsView() {
           </p>
         </div>
       ) : null}
+
+      <form
+        className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+        onSubmit={submitCorrection}
+      >
+        <h2 className="text-lg font-semibold">Know the correct medication?</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Enter the name from the bottle or pharmacist label. PillCheck will
+          enrich it from public drug data and add it as a possible match.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+          <input
+            className="field"
+            value={correctName}
+            onChange={(event) => setCorrectName(event.target.value)}
+            placeholder="Example: montelukast 10 mg"
+            required
+          />
+          <button className="btn-primary" type="submit" disabled={isCorrecting}>
+            {isCorrecting ? "Enriching..." : "Add match"}
+          </button>
+        </div>
+        {correctionStatus ? (
+          <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
+            {correctionStatus}
+          </p>
+        ) : null}
+      </form>
 
       <div className="grid gap-4">
         {matches.map((match) => (

@@ -104,3 +104,13 @@ export const feedbackRequestSchema = z.object({
   pill_reference_id: z.string().uuid(),
   feedback_value: z.enum(["looks_correct", "looks_wrong", "not_sure"]),
 });
+
+export const referenceCorrectionRequestSchema = z.object({
+  medication_name: z.string().trim().min(2),
+  imprint: z.string().trim().min(1).nullable(),
+  front_imprint: z.string().trim().min(1).nullable().optional(),
+  back_imprint: z.string().trim().min(1).nullable().optional(),
+  shape: z.string().trim().min(1).nullable(),
+  color: z.string().trim().min(1).nullable(),
+  photo_quality: photoQualitySchema.default("okay"),
+});

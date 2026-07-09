@@ -58,6 +58,17 @@ export function ConfirmationForm() {
 
       const payload = await response.json();
       sessionStorage.setItem("pillcheck.results", JSON.stringify(payload));
+      sessionStorage.setItem(
+        "pillcheck.lastSearch",
+        JSON.stringify({
+          imprint: combinedImprint(frontImprint, backImprint, imprint),
+          front_imprint: frontImprint.trim() || null,
+          back_imprint: backImprint.trim() || null,
+          shape: shape || null,
+          color: color.trim() || null,
+          photo_quality: analysis?.photo_quality ?? "okay",
+        }),
+      );
       const history = JSON.parse(localStorage.getItem("pillcheck.history") ?? "[]");
       localStorage.setItem(
         "pillcheck.history",

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fetchRxNormByName } from "@/lib/pillcheck/enrichment";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
   const name = request.nextUrl.searchParams.get("name");
@@ -6,12 +8,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing name" }, { status: 400 });
   }
 
-  // TODO: Check pillidentify_api_cache first, then call RxNav:
-  // https://rxnav.nlm.nih.gov/REST/approximateTerm.json?term={name}&maxEntries=5
+  const supabase = await createClient();
+  const data = await fetchRxNormByName(supabase, name);
+
   return NextResponse.json({
     provider: "rxnorm",
     name,
-    status: "stub",
-    data: null,
+    data,
   });
 }
