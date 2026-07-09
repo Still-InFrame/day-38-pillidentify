@@ -3,6 +3,8 @@ import type { PillMatch, PillReference } from "./types";
 
 type SearchInput = {
   imprint: string | null;
+  front_imprint?: string | null;
+  back_imprint?: string | null;
   shape: string | null;
   color: string | null;
   photo_quality: "poor" | "okay" | "good";
@@ -23,14 +25,32 @@ function labelForScore(score: number, hasImprint: boolean): "low" | "medium" | "
   return "low";
 }
 
+function uniqueImprintVariants(input: SearchInput) {
+  const front = normalizeImprint(input.front_imprint);
+  const back = normalizeImprint(input.back_imprint);
+  const combined = normalizeImprint(input.imprint);
+  const candidates = [
+    { value: combined, reason: "imprint" },
+    { value: [front, back].filter(Boolean).join(""), reason: "front/back imprint" },
+    { value: [back, front].filter(Boolean).join(""), reason: "back/front imprint" },
+    { value: front, reason: "front-side imprint" },
+    { value: back, reason: "back-side imprint" },
+  ].filter((candidate) => candidate.value);
+
+  return candidates.filter(
+    (candidate, index, all) =>
+      all.findIndex((item) => item.value === candidate.value) === index,
+  );
+}
+
 export function rankPillMatches(
   references: PillReference[],
   input: SearchInput,
 ): PillMatch[] {
-  const normalizedInputImprint = normalizeImprint(input.imprint);
+  const imprintVariants = uniqueImprintVariants(input);
   const normalizedInputShape = normalizeTrait(input.shape);
   const normalizedInputColor = normalizeTrait(input.color);
-  const hasImprint = normalizedInputImprint.length > 0;
+  const hasImprint = imprintVariants.length > 0;
 
   return references
     .map((reference) => {
@@ -41,17 +61,22 @@ export function rankPillMatches(
       const referenceShape = normalizeTrait(reference.shape);
       const referenceColor = normalizeTrait(reference.color);
 
-      if (hasImprint && referenceImprint === normalizedInputImprint) {
+      const exactVariant = imprintVariants.find(
+        (variant) => referenceImprint === variant.value,
+      );
+      const partialVariant = imprintVariants.find(
+        (variant) =>
+          referenceImprint &&
+          (referenceImprint.includes(variant.value) ||
+            variant.value.includes(referenceImprint)),
+      );
+
+      if (exactVariant) {
         score += 60;
-        match_reasons.push("Exact imprint match");
-      } else if (
-        hasImprint &&
-        referenceImprint &&
-        (referenceImprint.includes(normalizedInputImprint) ||
-          normalizedInputImprint.includes(referenceImprint))
-      ) {
+        match_reasons.push(`Exact ${exactVariant.reason} match`);
+      } else if (partialVariant) {
         score += 35;
-        match_reasons.push("Partial imprint match");
+        match_reasons.push(`Partial ${partialVariant.reason} match`);
       }
 
       if (normalizedInputShape && referenceShape === normalizedInputShape) {

@@ -46,6 +46,8 @@ export const analyzePillImageRequestSchema = z.object({
 
 export const searchPillMatchesRequestSchema = z.object({
   imprint: z.string().trim().min(1).nullable(),
+  front_imprint: z.string().trim().min(1).nullable().optional(),
+  back_imprint: z.string().trim().min(1).nullable().optional(),
   shape: z.string().trim().min(1).nullable(),
   color: z.string().trim().min(1).nullable(),
   photo_quality: photoQualitySchema.default("okay"),

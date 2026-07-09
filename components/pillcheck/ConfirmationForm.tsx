@@ -12,6 +12,8 @@ export function ConfirmationForm() {
   const router = useRouter();
   const [analysis, setAnalysis] = useState<PillAnalysis | null>(null);
   const [imprint, setImprint] = useState("");
+  const [frontImprint, setFrontImprint] = useState("");
+  const [backImprint, setBackImprint] = useState("");
   const [shape, setShape] = useState("unknown");
   const [color, setColor] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -24,6 +26,9 @@ export function ConfirmationForm() {
 
       const parsed = JSON.parse(stored) as PillAnalysis;
       setAnalysis(parsed);
+      const splitImprints = splitDetectedImprint(parsed.imprint_text);
+      setFrontImprint(splitImprints.front);
+      setBackImprint(splitImprints.back);
       setImprint(parsed.imprint_text ?? "");
       setShape(parsed.shape);
       setColor(parsed.color ?? "");
@@ -40,7 +45,9 @@ export function ConfirmationForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          imprint: imprint.trim() || null,
+          imprint: combinedImprint(frontImprint, backImprint, imprint),
+          front_imprint: frontImprint.trim() || null,
+          back_imprint: backImprint.trim() || null,
           shape: shape || null,
           color: color.trim() || null,
           photo_quality: analysis?.photo_quality ?? "okay",
@@ -57,7 +64,7 @@ export function ConfirmationForm() {
         JSON.stringify([
           {
             created_at: new Date().toISOString(),
-            imprint: imprint.trim() || null,
+            imprint: combinedImprint(frontImprint, backImprint, imprint),
             shape,
             color: color.trim() || null,
             result_count: payload.matches.length,
@@ -101,14 +108,39 @@ export function ConfirmationForm() {
         </p>
 
         <div className="mt-5 grid gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="grid gap-2 text-sm font-medium text-slate-800">
+              Front imprint
+              <input
+                className="field"
+                value={frontImprint}
+                onChange={(event) => setFrontImprint(event.target.value)}
+                placeholder="Example: 114"
+              />
+            </label>
+
+            <label className="grid gap-2 text-sm font-medium text-slate-800">
+              Back imprint
+              <input
+                className="field"
+                value={backImprint}
+                onChange={(event) => setBackImprint(event.target.value)}
+                placeholder="Example: I"
+              />
+            </label>
+          </div>
+
           <label className="grid gap-2 text-sm font-medium text-slate-800">
-            Imprint text
+            Combined imprint
             <input
               className="field"
               value={imprint}
               onChange={(event) => setImprint(event.target.value)}
-              placeholder="Example: I-2"
+              placeholder="Example: 114 I"
             />
+            <span className="text-xs font-normal leading-5 text-slate-500">
+              Used as a fallback if the side-specific fields do not match.
+            </span>
           </label>
 
           <label className="grid gap-2 text-sm font-medium text-slate-800">
@@ -152,4 +184,22 @@ export function ConfirmationForm() {
       </section>
     </form>
   );
+}
+
+function splitDetectedImprint(value: string | null) {
+  const parts = (value ?? "")
+    .split(/[;,/|]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return {
+    front: parts[0] ?? value ?? "",
+    back: parts[1] ?? "",
+  };
+}
+
+function combinedImprint(front: string, back: string, fallback: string) {
+  const sides = [front.trim(), back.trim()].filter(Boolean);
+  if (sides.length > 0) return sides.join(" ") || null;
+  return fallback.trim() || null;
 }

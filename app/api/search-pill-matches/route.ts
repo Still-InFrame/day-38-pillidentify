@@ -70,6 +70,8 @@ async function loadReferences(): Promise<PillReference[]> {
 async function saveSearch(
   input: {
     imprint: string | null;
+    front_imprint?: string | null;
+    back_imprint?: string | null;
     shape: string | null;
     color: string | null;
     photo_quality: "poor" | "okay" | "good";
