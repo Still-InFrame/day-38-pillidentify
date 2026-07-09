@@ -1,5 +1,7 @@
 # PillCheck AI
 
+**Live:** https://pillidentify.100dayaichallenge.com
+
 ![PillCheck AI — possible pill matches from visible traits](./public/hero.png)
 
 > Product-concept mockup — the app returns possible matches only, never definitive identification or medication safety advice.
