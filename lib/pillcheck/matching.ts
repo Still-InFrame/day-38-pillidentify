@@ -18,6 +18,26 @@ function normalizeTrait(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase();
 }
 
+function traitTokens(value: string | null | undefined) {
+  return normalizeTrait(value)
+    .split(/[^a-z0-9]+/g)
+    .filter(Boolean);
+}
+
+function traitsOverlap(input: string | null | undefined, reference: string | null | undefined) {
+  const inputTokens = traitTokens(input);
+  const referenceTokens = traitTokens(reference);
+
+  return inputTokens.some((inputToken) =>
+    referenceTokens.some(
+      (referenceToken) =>
+        inputToken === referenceToken ||
+        inputToken.includes(referenceToken) ||
+        referenceToken.includes(inputToken),
+    ),
+  );
+}
+
 function labelForScore(score: number, hasImprint: boolean): "low" | "medium" | "high" {
   if (!hasImprint) return "low";
   if (score >= 85) return "high";
@@ -66,6 +86,8 @@ export function rankPillMatches(
       );
       const partialVariant = imprintVariants.find(
         (variant) =>
+          variant.value.length >= 2 &&
+          referenceImprint.length >= 2 &&
           referenceImprint &&
           (referenceImprint.includes(variant.value) ||
             variant.value.includes(referenceImprint)),
@@ -82,11 +104,15 @@ export function rankPillMatches(
       if (normalizedInputShape && referenceShape === normalizedInputShape) {
         score += 20;
         match_reasons.push("Shape match");
+      } else if (normalizedInputShape && referenceShape) {
+        score -= 15;
       }
 
-      if (normalizedInputColor && referenceColor === normalizedInputColor) {
+      if (normalizedInputColor && traitsOverlap(input.color, reference.color)) {
         score += 20;
         match_reasons.push("Color match");
+      } else if (normalizedInputColor && referenceColor) {
+        score -= 10;
       }
 
       if (
@@ -127,7 +153,7 @@ export function rankPillMatches(
         safety_disclaimer: POSSIBLE_MATCH_WARNING,
       } satisfies PillMatch;
     })
-    .filter((match) => match.confidence_score > 0)
+    .filter((match) => match.confidence_score >= 20)
     .sort((a, b) => b.confidence_score - a.confidence_score)
     .slice(0, 8);
 }

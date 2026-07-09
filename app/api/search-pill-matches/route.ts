@@ -58,13 +58,33 @@ async function loadReferences(): Promise<PillReference[]> {
 
     const parsed = pillReferenceSchema.array().safeParse(data ?? []);
     if (parsed.success && parsed.data.length > 0) {
-      return parsed.data;
+      return mergeReferences(parsed.data, mockPillReferences);
     }
   } catch {
     // The MVP remains usable before the Supabase schema is installed.
   }
 
   return mockPillReferences;
+}
+
+function mergeReferences(
+  primaryReferences: PillReference[],
+  fallbackReferences: PillReference[],
+) {
+  const referencesByKey = new Map<string, PillReference>();
+
+  for (const reference of [...primaryReferences, ...fallbackReferences]) {
+    const key =
+      reference.normalized_imprint ??
+      reference.imprint ??
+      reference.id;
+
+    if (!referencesByKey.has(key)) {
+      referencesByKey.set(key, reference);
+    }
+  }
+
+  return Array.from(referencesByKey.values());
 }
 
 async function saveSearch(
