@@ -35,12 +35,16 @@ export async function cachedJson<T>(
 
   const responseJson = await fetcher();
 
-  await supabase.from("pillidentify_api_cache").insert({
-    provider,
-    cache_key: cacheKey,
-    response_json: responseJson as Json,
-    expires_at: new Date(Date.now() + ONE_WEEK_MS).toISOString(),
-  });
+  try {
+    await supabase.from("pillidentify_api_cache").insert({
+      provider,
+      cache_key: cacheKey,
+      response_json: responseJson as Json,
+      expires_at: new Date(Date.now() + ONE_WEEK_MS).toISOString(),
+    });
+  } catch {
+    // Cache writes are best-effort because this app intentionally avoids service-role keys.
+  }
 
   return responseJson;
 }
@@ -58,7 +62,7 @@ export async function fetchRxNormByName(
       fetchJson(
         `https://rxnav.nlm.nih.gov/REST/approximateTerm.json?term=${encodeURIComponent(term)}&maxEntries=5`,
       ),
-  );
+  ).catch((): RxNormApproximateResponse => ({}));
   const rxcui = approximate.approximateGroup?.candidate?.[0]?.rxcui ?? null;
 
   if (!rxcui) {
@@ -73,7 +77,7 @@ export async function fetchRxNormByName(
       fetchJson(
         `https://rxnav.nlm.nih.gov/REST/rxcui/${encodeURIComponent(rxcui)}/allProperties.json?prop=all`,
       ),
-  );
+  ).catch(() => null);
 
   return { rxcui, properties };
 }
@@ -92,7 +96,7 @@ export async function fetchDailyMedByName(
       fetchJson(
         `https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?drug_name=${encodeURIComponent(term)}&pagesize=5&page=1`,
       ),
-  );
+  ).catch(() => ({ data: [] }));
 }
 
 export async function fetchDailyMedByNdc(
@@ -107,7 +111,7 @@ export async function fetchDailyMedByNdc(
       fetchJson(
         `https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?ndc=${encodeURIComponent(ndc)}&pagesize=5&page=1`,
       ),
-  );
+  ).catch(() => ({ data: [] }));
 }
 
 export async function fetchOpenFdaByName(
