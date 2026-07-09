@@ -19,9 +19,21 @@ function normalizeTrait(value: string | null | undefined) {
 }
 
 function traitTokens(value: string | null | undefined) {
-  return normalizeTrait(value)
+  const tokens = normalizeTrait(value)
     .split(/[^a-z0-9]+/g)
     .filter(Boolean);
+
+  return tokens.flatMap((token) => {
+    if (["beige", "tan", "yellow"].includes(token)) {
+      return [token, "warmneutral"];
+    }
+
+    if (["square", "rounded"].includes(token)) {
+      return [token, "roundedsquare"];
+    }
+
+    return [token];
+  });
 }
 
 function traitsOverlap(input: string | null | undefined, reference: string | null | undefined) {
@@ -101,7 +113,7 @@ export function rankPillMatches(
         match_reasons.push(`Partial ${partialVariant.reason} match`);
       }
 
-      if (normalizedInputShape && referenceShape === normalizedInputShape) {
+      if (normalizedInputShape && traitsOverlap(input.shape, reference.shape)) {
         score += 20;
         match_reasons.push("Shape match");
       } else if (normalizedInputShape && referenceShape) {
